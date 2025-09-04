@@ -7,7 +7,7 @@ app.use(express.json());
 app.post("/api/chat", async (req, res) => {
   const { messages } = req.body;
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch("https://api.vsegpt.ru/v1/chat/completions", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${process.env.LLM_API_KEY}`,
