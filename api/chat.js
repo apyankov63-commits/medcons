@@ -1,5 +1,6 @@
 // /api/chat.js (Next.js API Route style)
 
+Access-Control-Allow-Origin: https://apyankov.ru
 import cors from "cors";
 app.use(cors());
 
