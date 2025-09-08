@@ -1,28 +1,55 @@
-// api/chat.js
-const OpenAI = require("openai");
+// server.ts
+import express from "express";
+import fetch from "node-fetch";
+import rateLimit from "express-rate-limit";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const app = express();
+app.use(express.json());
 
-module.exports = async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+// простая защита от DDOS/спама
+app.use("/api/chat", rateLimit({ windowMs: 30_000, max: 30 }));
 
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+const SYSTEM_PROMPT = process.env.SYSTEM_PROMPT ?? "Ты — вежливый консультант...";
+const LLM_API_BASE = process.env.LLM_API_BASE ?? "https://api.openai.com/v1";
+const LLM_API_KEY  = process.env.LLM_API_KEY!;
 
+app.post("/api/chat", async (req, res) => {
   try {
-    const { messages } = req.body;
-    if (!messages) return res.status(400).json({ error: "No messages provided" });
+    const { messages, meta } = req.body;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages,
+    // жёстко фиксируем системный промпт на бэкенде
+    const fullMessages = [
+      { role: "system", content: SYSTEM_PROMPT },
+      ...(Array.isArray(messages) ? messages : []),
+    ];
+
+    const r = await fetch(`${LLM_API_BASE}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${LLM_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: process.env.LLM_MODEL ?? "gpt-4o-mini",
+        temperature: 0.2,
+        messages: fullMessages,
+        // можно включить стриминг: stream: true (потребует SSE-обработчик)
+      })
     });
 
-    res.status(200).json({ reply: completion.choices[0].message });
-  } catch (err) {
-    console.error("API Error:", err);
-    res.status(500).json({ error: err.message });
+    if (!r.ok) {
+      const txt = await r.text();
+      return res.status(r.status).json({ error: txt });
+    }
+
+    const data = await r.json();
+    const answer = data.choices?.[0]?.message?.content ?? "";
+    res.json({ answer });
+  } catch (e:any) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
   }
-};
+});
+
+const port = process.env.PORT ?? 3000;
+app.listen(port, () => console.log(`API listening on :${port}`));
