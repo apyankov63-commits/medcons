@@ -1,55 +1,38 @@
-// server.ts
-import express from "express";
-import fetch from "node-fetch";
-import rateLimit from "express-rate-limit";
+// /api/chat.js (Next.js API Route style)
 
-const app = express();
-app.use(express.json());
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
-// простая защита от DDOS/спама
-app.use("/api/chat", rateLimit({ windowMs: 30_000, max: 30 }));
-
-const SYSTEM_PROMPT = process.env.SYSTEM_PROMPT ?? "Ты — вежливый консультант...";
-const LLM_API_BASE = process.env.LLM_API_BASE ?? "https://api.openai.com/v1";
-const LLM_API_KEY  = process.env.LLM_API_KEY!;
-
-app.post("/api/chat", async (req, res) => {
   try {
-    const { messages, meta } = req.body;
+    const { messages } = req.body;
+    const systemPrompt = process.env.SYSTEM_PROMPT ?? "Ты — медицинский консультант.";
+    const apiKey = process.env.OPENAI_API_KEY;
 
-    // жёстко фиксируем системный промпт на бэкенде
-    const fullMessages = [
-      { role: "system", content: SYSTEM_PROMPT },
-      ...(Array.isArray(messages) ? messages : []),
-    ];
+    if (!apiKey) {
+      return res.status(500).json({ error: "OPENAI_API_KEY is not set" });
+    }
 
-    const r = await fetch(`${LLM_API_BASE}/chat/completions`, {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${LLM_API_KEY}`,
+        "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: process.env.LLM_MODEL ?? "gpt-4o-mini",
-        temperature: 0.2,
-        messages: fullMessages,
-        // можно включить стриминг: stream: true (потребует SSE-обработчик)
-      })
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...(Array.isArray(messages) ? messages : []),
+        ],
+      }),
     });
 
-    if (!r.ok) {
-      const txt = await r.text();
-      return res.status(r.status).json({ error: txt });
-    }
-
-    const data = await r.json();
-    const answer = data.choices?.[0]?.message?.content ?? "";
-    res.json({ answer });
-  } catch (e:any) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
+    const data = await response.json();
+    return res.status(200).json({ reply: data.choices?.[0]?.message?.content });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Internal server error" });
   }
-});
-
-const port = process.env.PORT ?? 3000;
-app.listen(port, () => console.log(`API listening on :${port}`));
+}
