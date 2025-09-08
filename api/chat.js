@@ -1,8 +1,18 @@
 // /api/chat.js (Next.js API Route style)
 
 // Access-Control-Allow-Origin: *
-import cors from "cors";
-app.use(cors());
+//import cors from "cors";
+//app.use(cors());
+
+// вместо cors()
+res.setHeader("Access-Control-Allow-Origin", "*");
+res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+if (req.method === "OPTIONS") {
+  return res.status(200).end();
+}
+
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
